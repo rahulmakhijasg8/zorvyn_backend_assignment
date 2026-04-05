@@ -22,5 +22,5 @@ class UserAdmin(BaseUserAdmin):
     )
     
 
-admin_site.site.register(User)
-admin_site.site.register(Transaction)
+admin_site.register(User)
+admin_site.register(Transaction)
