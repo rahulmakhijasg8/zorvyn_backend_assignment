@@ -7,6 +7,7 @@ class CustomAdminSite(admin.AdminSite):
     def has_permission(self, request):
         return (
             request.user.is_active
+            and request.user.is_staff
             and (request.user.is_superuser or request.user.role == 'Admin')
         )
 
