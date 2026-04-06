@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
     'django_filters',
     'drf_spectacular',
     'rest_framework',
+    'rest_framework_simplejwt',
     'api'
 ]
 
@@ -55,6 +57,15 @@ REST_FRAMEWORK = {
         'user': '100/hour',
     },
      'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication', 
+    ],
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
 SPECTACULAR_SETTINGS = {

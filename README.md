@@ -21,6 +21,7 @@ Full interactive API documentation is available at the Swagger UI link above.
 - **Language:** Python 3.10
 - **Framework:** Django 5.2, Django REST Framework
 - **Database:** SQLite
+- **Authentication:** JWT (SimpleJWT)
 - **Documentation:** drf-spectacular (Swagger/OpenAPI)
 - **Filtering:** django-filter
 - **Deployment:** PythonAnywhere
@@ -39,6 +40,7 @@ Full interactive API documentation is available at the Swagger UI link above.
 
 ### Additional
 
+- JWT token authentication (access + refresh tokens)
 - Interactive API documentation (Swagger UI)
 - Pagination (10 items per page)
 - Search support across notes and categories
@@ -91,6 +93,20 @@ Extends Django's `AbstractUser` with custom fields:
 | is_deleted | boolean | Soft delete flag (default: false) |
 | created_at | datetime | Auto-set on creation |
 | updated_at | datetime | Auto-updated on save |
+
+---
+
+## Authentication
+
+The API uses JWT (JSON Web Tokens) for authentication.
+
+**Login:** `POST /api/token/` with username and password to receive an access token and a refresh token.
+
+**Authenticated requests:** Include the access token in the Authorization header as `Bearer <token>`.
+
+**Token refresh:** `POST /api/token/refresh/` with the refresh token to get a new access token when the current one expires.
+
+Access tokens expire after 1 hour. Refresh tokens expire after 7 days.
 
 ---
 
@@ -156,6 +172,224 @@ python manage.py runserver
 
 ---
 
+## Testing Guide
+
+This guide walks through testing every API endpoint using the Swagger UI at `/api/docs/` or any API client like Postman.
+
+### Step 1: Get an Admin Token
+
+```
+POST /api/token/
+{
+    "username": "your-admin-username",
+    "password": "your-admin-password"
+}
+```
+
+Copy the `access` token from the response. In Swagger UI, click the "Authorize" button at the top and enter: `Bearer <your-access-token>`.
+
+### Step 2: Test User Management (Admin only)
+
+**Create users with different roles:**
+
+```
+POST /api/users/
+{
+    "username": "analyst_user",
+    "email": "analyst@example.com",
+    "password": "testpass123",
+    "role": "Analyst"
+}
+```
+
+```
+POST /api/users/
+{
+    "username": "viewer_user",
+    "email": "viewer@example.com",
+    "password": "testpass123",
+    "role": "Viewer"
+}
+```
+
+**List all users:**
+```
+GET /api/users/
+```
+
+**Get a specific user:**
+```
+GET /api/users/2/
+```
+
+**Update a user:**
+```
+PATCH /api/users/2/
+{
+    "role": "Analyst"
+}
+```
+
+**Delete a user:**
+```
+DELETE /api/users/3/
+```
+
+### Step 3: Test Transactions (as Admin)
+
+**Create transactions:**
+
+```
+POST /api/transactions/
+{
+    "amount": 50000.00,
+    "type_of": "Income",
+    "category": "salary",
+    "notes": "March salary"
+}
+```
+
+```
+POST /api/transactions/
+{
+    "amount": 15000.00,
+    "type_of": "Expense",
+    "category": "rent",
+    "notes": "March rent"
+}
+```
+
+```
+POST /api/transactions/
+{
+    "amount": 3000.00,
+    "type_of": "Expense",
+    "category": "food",
+    "notes": "Groceries"
+}
+```
+
+**List all transactions:**
+```
+GET /api/transactions/
+```
+
+**Filter transactions:**
+```
+GET /api/transactions/?type_of=Income
+GET /api/transactions/?category=food
+GET /api/transactions/?start_date=2025-01-01&end_date=2025-12-31
+```
+
+**Search transactions:**
+```
+GET /api/transactions/?search=rent
+```
+
+**Update a transaction:**
+```
+PATCH /api/transactions/1/
+{
+    "amount": 55000.00,
+    "notes": "March salary - revised"
+}
+```
+
+**Delete a transaction (soft delete):**
+```
+DELETE /api/transactions/3/
+```
+
+### Step 4: Test Dashboard
+
+**View full dashboard:**
+```
+GET /api/dashboard/
+```
+
+Expected response includes total_income, total_expenses, net_balance, category_totals, recent_transactions, and monthly_trends.
+
+**View a specific user's dashboard:**
+```
+GET /api/dashboard/?user_id=2
+```
+
+### Step 5: Test Access Control
+
+**Login as Analyst:**
+```
+POST /api/token/
+{
+    "username": "analyst_user",
+    "password": "testpass123"
+}
+```
+
+Use the new token and verify:
+- ✅ `GET /api/transactions/` — should work
+- ✅ `GET /api/dashboard/` — should work
+- ❌ `POST /api/transactions/` — should return 403 Forbidden
+- ❌ `GET /api/users/` — should return 403 Forbidden
+
+**Login as Viewer:**
+```
+POST /api/token/
+{
+    "username": "viewer_user",
+    "password": "testpass123"
+}
+```
+
+Use the new token and verify:
+- ✅ `GET /api/dashboard/` — should work (own data only)
+- ❌ `GET /api/transactions/` — should return 403 Forbidden
+- ❌ `POST /api/transactions/` — should return 403 Forbidden
+- ❌ `GET /api/users/` — should return 403 Forbidden
+- ❌ `GET /api/dashboard/?user_id=1` — should ignore the parameter and show only own data
+
+### Step 6: Test Validation
+
+**Invalid amount:**
+```
+POST /api/transactions/
+{
+    "amount": -500,
+    "type_of": "Income",
+    "category": "salary"
+}
+```
+Expected: 400 Bad Request with "Amount must be greater than zero."
+
+**Missing required fields:**
+```
+POST /api/transactions/
+{
+    "notes": "just a note"
+}
+```
+Expected: 400 Bad Request with field-level errors.
+
+**Invalid category:**
+```
+POST /api/transactions/
+{
+    "amount": 1000,
+    "type_of": "Income",
+    "category": "invalid_category"
+}
+```
+Expected: 400 Bad Request.
+
+### Step 7: Test Without Authentication
+
+Remove the Authorization header and try:
+```
+GET /api/transactions/
+```
+Expected: 401 Unauthorized.
+
+---
+
 ## Project Structure
 
 ```
@@ -185,8 +419,10 @@ project-root/
 - **Soft delete over hard delete:** Transactions are soft-deleted (marked with `is_deleted=True`) rather than removed from the database, allowing data recovery.
 - **Date auto-set on creation:** The `date` field uses `auto_now_add=True`, meaning it captures when the record was created. A manual date field could be added if backdating transactions is needed.
 - **SQLite for simplicity:** SQLite is used as the database for ease of setup and deployment. For production at scale, PostgreSQL would be recommended.
+- **JWT for authentication:** Stateless token-based auth makes the API suitable for consumption by frontends and mobile apps. Session auth is retained alongside for the browsable API during development.
 - **Superuser bypass:** Django superusers are granted full access in permission checks to avoid lockout scenarios.
 - **Analyst sees all data by default:** Analysts have a bird's-eye view of all transactions and summaries, with the option to drill down to a specific user via `?user_id=`. This differentiates them from Viewers who only see their own data.
+- **No tokens on registration:** User creation is admin-only, so the new user logs in separately to get their own tokens.
 
 ---
 
@@ -199,17 +435,10 @@ The API returns appropriate HTTP status codes:
 | 200 | Success |
 | 201 | Created |
 | 400 | Bad request / validation error |
-| 401 | Unauthorized (not logged in) |
+| 401 | Unauthorized (not logged in or invalid token) |
 | 403 | Forbidden (insufficient role) |
 | 404 | Not found |
 | 429 | Rate limit exceeded |
-
-Validation errors return descriptive messages:
-```json
-{
-    "amount": ["Amount must be greater than zero."]
-}
-```
 
 ---
 
