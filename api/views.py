@@ -29,7 +29,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = TransactionFilter
     search_fields = ['notes', 'category']
 
@@ -40,9 +40,11 @@ class TransactionViewSet(viewsets.ModelViewSet):
         if user.role == User.Role.VIEWER:
             return Transaction.objects.filter(user=user, is_deleted=False)
 
-        if target_user_id:
-            return Transaction.objects.filter(user_id=target_user_id, is_deleted=False)
-        return Transaction.objects.filter(is_deleted=False)
+        if user.role in [User.Role.ANALYST, User.Role.ADMIN]:
+            if target_user_id:
+                return Transaction.objects.filter(user_id=target_user_id, is_deleted=False)
+            else:
+                return Transaction.objects.filter(is_deleted=False)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -51,6 +53,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.is_deleted = True
+        instance.save()
 
 
 class DashboardView(APIView):
