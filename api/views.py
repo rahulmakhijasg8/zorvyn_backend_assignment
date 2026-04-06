@@ -25,6 +25,13 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return RegisterSerializer
         return UserSerializer
+    
+    def get_queryset(self):
+        return User.objects.filter(isactive=True)
+
+    def perform_destroy(self, instance):
+        instance.isactive = False
+        instance.save()
 
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
@@ -70,6 +77,11 @@ class DashboardView(APIView):
             transactions = Transaction.objects.filter(user=user, is_deleted=False)
         else:
             if target_user_id:
+                if not User.objects.filter(id=target_user_id).exists():
+                    return Response(
+                        {"error": "User not found."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
                 transactions = Transaction.objects.filter(user_id=target_user_id, is_deleted=False)
             else:
                 transactions = Transaction.objects.filter(is_deleted=False)
